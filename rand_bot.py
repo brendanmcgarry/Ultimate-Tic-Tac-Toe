@@ -10,6 +10,8 @@ This is the ONLY file you should modify.
 
 from random import randint
 
+EMPTY = '.'
+
 class bot:
     
     mapping = ['NW', 'N', 'NE', 'W', 'C', 'E', 'SW', 'S', 'SE']
@@ -23,6 +25,29 @@ class bot:
     def move(self, game, forced_move):
         "Logic for your bot"
         
-        # return self.map_tile[forced_move[randint(0, len(forced_move) - 1)]], self.mapping[randint(0, 8)]
-        return self.mapping[randint(0, 8)], self.mapping[randint(0, 8)]
+        try:
+        
+            attempts = 0
+            outer = self.map_tile[forced_move[randint(0, len(forced_move) - 1)]] if len(forced_move) else randint(0, 8)
+            inner = randint(0, 8)
+            while game[outer][inner] != EMPTY and attempts < 100:
+                attempts += 1
+                outer = self.map_tile[forced_move[randint(0, len(forced_move) - 1)]] if len(forced_move) else randint(0, 8)
+                inner = randint(0, 8)
+            
+            if game[outer][inner] != EMPTY:
+                valid_found = False
+                for o in range(9):
+                    for i in range(9):
+                        if game[o][i] == EMPTY and self.mapping[o] in forced_move:
+                            outer, inner = o, i
+                            valid_found = True
+                            break
+                    if valid_found:
+                        break
+        except Exception as e:
+            print(e)
+            print(outer)
+        
+        return self.mapping[outer], self.mapping[inner]
 

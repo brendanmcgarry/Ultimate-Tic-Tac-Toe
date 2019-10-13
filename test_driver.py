@@ -19,7 +19,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="CS GAMES 2020 AI Tryout")
     parser.add_argument("bot1", type=str, help="filename")
     parser.add_argument("bot2", type=str, help="filename")
-    parser.add_argument("--verbose", action="store_true", help="display the gameboard")
+    parser.add_argument("--verbose", "-v", action="store_true", help="display the gameboard")
+    parser.add_argument("--rounds", "-r", type=int, help="number of games to be played")
+    parser.add_argument("--alternate", "-a", help="whether player order alternates between games")
     args = parser.parse_args()
     
     # Import bot class
@@ -37,8 +39,8 @@ if __name__ == "__main__":
         bots[1].team_name += '2'
     
     winners = []
-    rounds = 10
-    for _ in range(rounds):
+    rounds = args.rounds or 100
+    for game_num in range(rounds):
         bots = bots[::-1]
         
         # Start game
@@ -57,16 +59,17 @@ if __name__ == "__main__":
             game.player_turn = (game.player_turn + 1) % 2
             if args.verbose:
                 game.status()
+                input()
                 
             if timed_out:
-                print(f"\n{bots[game.player_turn].team_name} won!!!")
+                print(f"\n{game_num}: {bots[game.player_turn].team_name} won!!!")
                 draw = True
                 break  # Opponent timed out
                 
             timed_out = True
             # Validate player's move
             # while True:
-            for _ in range(19999):
+            for _ in range(10):
                 player_move = bots[game.player_turn].move(
                     copy.deepcopy(game.board), copy.deepcopy(forced_move)
                 )
@@ -96,10 +99,15 @@ if __name__ == "__main__":
                     
                 if game.check_win(game.win_status):
                     print(
-                        f"\n{bots[game.player_turn].team_name} won!!!"
+                        f"\n{game_num}: {bots[game.player_turn].team_name} won!!!"
                     )  # Winning sequence
                     break
         
         winners.append('Draw' if draw else bots[game.player_turn].team_name)
     
-    print(Counter(winners))
+    c = Counter(winners)
+    print(c)
+    for b in range(2):
+        print('{}: {}%'.format(bots[b].team_name,
+            (c[bots[b].team_name ] + c['Draw'] / 2) / args.rounds * 100))
+    

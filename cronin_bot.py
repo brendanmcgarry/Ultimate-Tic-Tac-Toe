@@ -28,10 +28,15 @@ class bot:
     def move(self, board, forced_moves):
         """Logic for your bot"""
         if not self.tick:
-            self.set_tick(board)
+            self._set_tick(board)
         
         for novant in forced_moves:
             coords = self.can_win_novant_square(board, novant)
+            if coords:
+                return coords
+        
+        for novant in forced_moves:
+            coords = self.can_win_novant_square(board, novant, self.opposite_tick())
             if coords:
                 return coords
         
@@ -45,7 +50,7 @@ class bot:
     def get_novant_square(self, board, novant):
         return board[self.mapping.index(novant)]
     
-    def can_win_novant_square(self, board, novant):
+    def can_win_novant_square(self, board, novant, tick=None):
         """Check if a novant can be won in one move.
         
         Parameters:
@@ -56,13 +61,15 @@ class bot:
             Novant coords for winning move if they exist, else None.
         """
         square = self.get_novant_square(board, novant)
+        if tick == None:
+            tick = self.tick
         
         # Check horizontal
         for i in (1, 2, 0):
             matches = {}
             for ind, x in enumerate(square[i * 3 : (i * 3) + 3]):
                 matches[x] = (1, i * 3 + ind) if x not in matches else (matches[x][0] + 1,)
-            if matches.get(self.tick) and matches.get(self.tick)[0] == 2 \
+            if matches.get(tick) and matches.get(tick)[0] == 2 \
             and matches.get(EMPTY) and matches.get(EMPTY)[0] == 1:
                 return novant, self.mapping[matches.get(EMPTY)[1]]
         
@@ -71,25 +78,25 @@ class bot:
             matches = {}
             for ind, x in enumerate(square[[i, i + 3, i + 6]]):
                 matches[x] = (1, i + ind * 3) if x not in matches else (matches[x][0] + 1,)
-            if matches.get(self.tick) and matches.get(self.tick)[0] == 2 \
+            if matches.get(tick) and matches.get(tick)[0] == 2 \
             and matches.get(EMPTY) and matches.get(EMPTY)[0] == 1:
                 return novant, self.mapping[matches.get(EMPTY)[1]]
         
         # Check NW-to-SE slash
         slash = Counter(x for x in square[[0, 4, 8]])
-        if slash.get(self.tick) == 2 and slash.get(EMPTY) == 1:
+        if slash.get(tick) == 2 and slash.get(EMPTY) == 1:
             cell_coord = self.mapping[square[[0, 4, 8]].tolist().index(EMPTY) * 4]
             return novant, cell_coord
         
         # Check NE-to-SW slash
         backslash = Counter(x for x in square[[2, 4, 6]])
-        if backslash.get(self.tick) == 2 and backslash.get(EMPTY) == 1:
+        if backslash.get(tick) == 2 and backslash.get(EMPTY) == 1:
             cell_coord = self.mapping[(square[[2, 4, 6]].tolist().index(EMPTY) + 1) * 2]
             return novant, cell_coord
         
         return None
     
-    def set_tick(self, board):
+    def _set_tick(self, board):
         for y in range(9):
             for x in range(9):
                 if board[y, x] != EMPTY:
@@ -97,3 +104,6 @@ class bot:
                     return
         
         self.tick = 'X'
+    
+    def opposite_tick(self, tick=None):
+        return 'X' if (tick or self.tick) == 'O' else 'O'
