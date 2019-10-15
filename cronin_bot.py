@@ -56,9 +56,10 @@ class bot:
         Parameters:
             board (np.array(dtype='<U1')): 9x9 game board
             novant (str): Enum of which 9th of the board being used
+            tick (str): The char symbol for the player being evaluated for.
         
         Returns:
-            Novant coords for winning move if they exist, else None.
+            tuple(str): Novant coords for winning move if they exist, else None.
         """
         square = self.get_novant_square(board, novant)
         if tick == None:
@@ -96,6 +97,44 @@ class bot:
         
         return None
     
+    def get_square_state(self, square, tick=None):
+        if tick is None:
+            tick = self.tick
+        
+        opposite = self.opposite_tick(tick)
+        
+        # Horizontal
+        for i in range(3):
+            # Win
+            if all(x == tick for x in square[i * 3 : (i * 3) + 3]):
+                return tick
+                
+            # Loss
+            elif all(x == opposite for x in square[i * 3 : (i * 3) + 3]):
+                return opposite
+                
+        # Vertical
+        for i in range(3):
+            if all(x == tick for x in square[[i, i + 3, i + 6]]):
+                return tick
+            elif all(x == opposite for x in square[i * 3 : (i * 3) + 3]):
+                return opposite
+                
+        # Diagonal
+        if all(x == tick for x in square[[0, 4, 8]]) \
+        or all(x == tick for x in square[[2, 4, 6]]):
+            return tick
+        
+        if all(x == opposite for x in square[[0, 4, 8]]) \
+        or all(x == opposite for x in square[[2, 4, 6]]):
+            return opposite
+        
+        if any(x == EMPTY for x in square):
+            return EMPTY
+        
+        # Draw
+        return 'Draw'
+    
     def _set_tick(self, board):
         for y in range(9):
             for x in range(9):
@@ -107,3 +146,15 @@ class bot:
     
     def opposite_tick(self, tick=None):
         return 'X' if (tick or self.tick) == 'O' else 'O'
+    
+    def get_all_moves(self, board, forced_moves):
+        moves = []
+        for novant in forced_moves:
+            square = self.get_novant_square(board, novant)
+            for i, cell in enumerate(square):
+                if cell == EMPTY:
+                    moves.append((novant, self.mapping[i]))
+        return moves
+    
+    def deep_move(self, board, forced_moves, depth=0):
+        pass
