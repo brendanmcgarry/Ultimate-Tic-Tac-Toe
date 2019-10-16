@@ -10,6 +10,7 @@ This is the ONLY file you should modify.
 
 from random import randint
 from collections import Counter
+import copy
 
 
 EMPTY = '.'
@@ -26,6 +27,12 @@ class bot:
         self.tick = None
     
     def move(self, board, forced_moves):
+        if not self.tick:
+            self._set_tick(board)
+        
+        move_strens = self.deep_move(board, forced_moves, depth=2)
+    
+    def _move(self, board, forced_moves):
         """Logic for your bot"""
         if not self.tick:
             self._set_tick(board)
@@ -50,8 +57,41 @@ class bot:
     def get_novant_square(self, board, novant):
         return board[self.mapping.index(novant)]
     
+    def can_win_square(self, square, tick=None):
+        # Check horizontal
+        for i in (1, 2, 0):
+            matches = {}
+            for ind, x in enumerate(square[i * 3 : (i * 3) + 3]):
+                matches[x] = (1, i * 3 + ind) if x not in matches else (matches[x][0] + 1,)
+            if matches.get(tick) and matches.get(tick)[0] == 2 \
+            and matches.get(EMPTY) and matches.get(EMPTY)[0] == 1:
+                return self.mapping[matches.get(EMPTY)[1]]
+        
+        # Check vertical
+        for i in (1, 2, 0):
+            matches = {}
+            for ind, x in enumerate(square[[i, i + 3, i + 6]]):
+                matches[x] = (1, i + ind * 3) if x not in matches else (matches[x][0] + 1,)
+            if matches.get(tick) and matches.get(tick)[0] == 2 \
+            and matches.get(EMPTY) and matches.get(EMPTY)[0] == 1:
+                return self.mapping[matches.get(EMPTY)[1]]
+        
+        # Check NW-to-SE slash
+        slash = Counter(x for x in square[[0, 4, 8]])
+        if slash.get(tick) == 2 and slash.get(EMPTY) == 1:
+            cell_coord = self.mapping[square[[0, 4, 8]].tolist().index(EMPTY) * 4]
+            return cell_coord
+        
+        # Check NE-to-SW slash
+        backslash = Counter(x for x in square[[2, 4, 6]])
+        if backslash.get(tick) == 2 and backslash.get(EMPTY) == 1:
+            cell_coord = self.mapping[(square[[2, 4, 6]].tolist().index(EMPTY) + 1) * 2]
+            return cell_coord
+        
+        return None
+    
     def can_win_novant_square(self, board, novant, tick=None):
-        """Check if a novant can be won in one move.
+        """Check if a square can be won in one move.
         
         Parameters:
             board (np.array(dtype='<U1')): 9x9 game board
@@ -65,37 +105,9 @@ class bot:
         if tick == None:
             tick = self.tick
         
-        # Check horizontal
-        for i in (1, 2, 0):
-            matches = {}
-            for ind, x in enumerate(square[i * 3 : (i * 3) + 3]):
-                matches[x] = (1, i * 3 + ind) if x not in matches else (matches[x][0] + 1,)
-            if matches.get(tick) and matches.get(tick)[0] == 2 \
-            and matches.get(EMPTY) and matches.get(EMPTY)[0] == 1:
-                return novant, self.mapping[matches.get(EMPTY)[1]]
+        res = self.can_win_square(board, square, tick)
         
-        # Check vertical
-        for i in (1, 2, 0):
-            matches = {}
-            for ind, x in enumerate(square[[i, i + 3, i + 6]]):
-                matches[x] = (1, i + ind * 3) if x not in matches else (matches[x][0] + 1,)
-            if matches.get(tick) and matches.get(tick)[0] == 2 \
-            and matches.get(EMPTY) and matches.get(EMPTY)[0] == 1:
-                return novant, self.mapping[matches.get(EMPTY)[1]]
-        
-        # Check NW-to-SE slash
-        slash = Counter(x for x in square[[0, 4, 8]])
-        if slash.get(tick) == 2 and slash.get(EMPTY) == 1:
-            cell_coord = self.mapping[square[[0, 4, 8]].tolist().index(EMPTY) * 4]
-            return novant, cell_coord
-        
-        # Check NE-to-SW slash
-        backslash = Counter(x for x in square[[2, 4, 6]])
-        if backslash.get(tick) == 2 and backslash.get(EMPTY) == 1:
-            cell_coord = self.mapping[(square[[2, 4, 6]].tolist().index(EMPTY) + 1) * 2]
-            return novant, cell_coord
-        
-        return None
+        return novant, res if res else None
     
     def get_square_state(self, square, tick=None):
         if tick is None:
@@ -156,5 +168,65 @@ class bot:
                     moves.append((novant, self.mapping[i]))
         return moves
     
-    def deep_move(self, board, forced_moves, depth=0):
-        pass
+    def _get_forced_moves(self, board, novant):
+        if self.get_square_state(board, self.get_novant_square(novant)) == EMPTY:
+            return novant
+        
+        return [nv for nv in self.mapping if self.get_square_state(board, self.get_novant_square(nv)) == EMPTY]
+    
+    def _make_move(self, board, move, tick):
+        if board[self.map_tile[move[0]]][self.map_tile[move[1]]] != EMPTY:
+            raise ValueError(f'Cannot make move in tile {move}; it is not empty.')
+        
+        board[self.map_tile[move[0]]][self.map_tile[move[1]]] = tick
+        print(move[1])
+        return self._get_forced_moves(board, move[1])
+    
+    def get_board_value(self, board, player=None):
+        if player is None:
+            player = self.tick
+        
+        opposite = self.opposite_tick(player)
+        value_mapping = { player: 1, opposite: -1, EMPTY: 0.5, 'Draw': 0 }
+        can_win_values = { player: 0.8, opposite: -0.8 }
+        
+        square_states = []
+        for nv in self.mapping:
+            square_state = self.get_square_state(self.get_novant_square(nv), player)
+            square_states.append(square_state)
+        
+        game_state = self.get_square_state(square_states)
+        if game_state in (player, opposite):
+            return value_mapping[game_state] * 100
+        
+        value = 0
+        for i, square_state in enumerate(square_states):
+            if square_state != 'Draw':
+                value += value_mapping[square_state]
+            elif self.can_win_novant_square(board, self.mapping[i], player):
+                value += can_win_values[player]
+            elif self.can_win_novant_square(board, self.mapping[i], opposite):
+                value += can_win_values[opposite]
+            else:
+                value += value_mapping['Draw']
+        
+        return sum([value_mapping[q] for q in square_states])
+    
+    def deep_move(self, board, forced_moves, depth=0, tick=None):
+        if tick is None:
+            tick = self.tick
+        
+        opposite = self.opposite_tick(tick)
+        
+        moves = self.get_all_moves(board, forced_moves)
+        move_values = {}
+        for move in moves:
+            new_forced_moves = self._make_move(board, move, tick)
+            if depth == 0:
+                # get value of board
+                move_values[move] = self.get_board_value(board, tick)
+            else:
+                move_values[move] = min(self.deep_move(board, depth=depth-1, tick=opposite).values())
+            board[self.map_tile[move[0]]][self.map_tile[move[1]]] = EMPTY
+        
+        return move_values
