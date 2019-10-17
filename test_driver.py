@@ -41,7 +41,7 @@ if __name__ == "__main__":
     winners = []
     rounds = args.rounds or 100
     for game_num in range(rounds):
-        bots = bots[::-1]
+        # bots = bots[::-1]
         
         # Start game
         game = Game()
@@ -59,7 +59,6 @@ if __name__ == "__main__":
             game.player_turn = (game.player_turn + 1) % 2
             if args.verbose:
                 game.status()
-                input()
                 
             if timed_out:
                 print(f"\n{game_num}: {bots[game.player_turn].team_name} won!!!")
@@ -104,10 +103,15 @@ if __name__ == "__main__":
                     break
         
         winners.append('Draw' if draw else bots[game.player_turn].team_name)
+        # c = Counter(winners)
+        # print(c)
+        # for b in range(2):
+        #     print('{}: {}%'.format(bots[b].team_name,
+        #         (c[bots[b].team_name ] + c['Draw'] / 2) / args.rounds * 100))
     
     c = Counter(winners)
     print(c)
     for b in range(2):
         print('{}: {}%'.format(bots[b].team_name,
-            (c[bots[b].team_name ] + c['Draw'] / 2) / args.rounds * 100))
+            (c[bots[b].team_name ] + c['Draw'] / 2) / len(winners) * 100))
     

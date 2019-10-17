@@ -8,9 +8,12 @@ This is the ONLY file you should modify.
 
 """
 
-from random import randint
+import numpy as np
+
+from random import randint, random
 from collections import Counter
 import copy
+import time
 
 
 EMPTY = '.'
@@ -21,16 +24,49 @@ class bot:
     map_tile = {'NW': 0, 'N': 1, 'NE': 2,
                 'W':  3, 'C': 4, 'E':  5,
                 'SW': 6, 'S': 7, 'SE': 8}
+    win_neighbors = {
+        'NW': ((1, 2), (3, 6), (4, 8)),
+        'N' : ((0, 2), (4, 7)),
+        'NE': ((0, 1), (5, 8)),
+        'W' : ((4, 5), (0, 6)),
+        'C' : ((3, 5), (1, 7), (0, 8), (2, 6)),
+        'E' : ((3, 4), (2, 8)),
+        'SW': ((7, 8), (0, 3), (2, 4)),
+        'S' : ((6, 8), (1, 4)),
+        'SE': ((7, 8), (2, 5), (0, 4))
+    }
     
     def __init__(self):
         self.team_name = "CroninBot"
         self.tick = None
+        self.enemy_tick = None
+    
+    # def move(self, board, forced_moves):
+    #     if not self.tick:
+    #         self._set_tick(board)
+        
+    #     self.steps = 0
+    #     best_move, _ = self.deep_move_alpha(
+    #         board=board,
+    #         forced_moves=forced_moves,
+    #         depth=4,
+    #         a=(-float('inf')),
+    #         b=float('inf'),
+    #         maxing_player=True)
+    #     if not best_move:
+    #         moves = self.get_all_moves(board, forced_moves)
+    #         best_move = moves[randint(0, len(moves) - 1)]\
+    #                     if moves \
+    #                     else (self.mapping[randint(0, 8)], self.mapping[randint(0, 8)])
+    #     print(self.steps)
+        
+    #     return best_move
     
     def move(self, board, forced_moves):
         if not self.tick:
             self._set_tick(board)
         
-        move_strens = self.deep_move(board, forced_moves, depth=2)
+        return self.mcts(board, forced_moves)
     
     def _move(self, board, forced_moves):
         """Logic for your bot"""
@@ -105,9 +141,12 @@ class bot:
         if tick == None:
             tick = self.tick
         
-        res = self.can_win_square(board, square, tick)
+        res = self.can_win_square(square, tick)
         
-        return novant, res if res else None
+        if res:
+            return novant, res
+        else:
+            return None
     
     def get_square_state(self, square, tick=None):
         if tick is None:
@@ -152,12 +191,16 @@ class bot:
             for x in range(9):
                 if board[y, x] != EMPTY:
                     self.tick = 'O'
+                    self.enemy_tick = 'X'
                     return
         
         self.tick = 'X'
+        self.enemy_tick = 'O'
     
     def opposite_tick(self, tick=None):
-        return 'X' if (tick or self.tick) == 'O' else 'O'
+        if not tick:
+            tick = self.tick
+        return 'X' if tick == 'O' else 'O'
     
     def get_all_moves(self, board, forced_moves):
         moves = []
@@ -169,64 +212,228 @@ class bot:
         return moves
     
     def _get_forced_moves(self, board, novant):
-        if self.get_square_state(board, self.get_novant_square(novant)) == EMPTY:
+        if self.get_square_state(self.get_novant_square(board, novant)) == EMPTY:
             return novant
         
-        return [nv for nv in self.mapping if self.get_square_state(board, self.get_novant_square(nv)) == EMPTY]
+        return [nv for nv in self.mapping if self.get_square_state(self.get_novant_square(board, nv)) == EMPTY]
     
     def _make_move(self, board, move, tick):
         if board[self.map_tile[move[0]]][self.map_tile[move[1]]] != EMPTY:
             raise ValueError(f'Cannot make move in tile {move}; it is not empty.')
         
         board[self.map_tile[move[0]]][self.map_tile[move[1]]] = tick
-        print(move[1])
         return self._get_forced_moves(board, move[1])
+    
+    # def get_board_value(self, board, player=None):
+    #     if player is None:
+    #         player = self.tick
+        
+    #     enemy = self.opposite_tick(player)
+        
+    #     value_mapping = { player: 1.1, enemy: -1, EMPTY: 0.1, 'Draw': 0 }
+    #     value = 0
+        
+    #     square_states = []
+    #     for nv in self.mapping:
+    #         square_state = self.get_square_state(self.get_novant_square(board, nv), player)
+    #         square_states.append(square_state)
+        
+    #     game_state = self.get_square_state(np.array(square_states))
+        
+    #     if game_state == player:
+    #         return 1000
+    #     elif game_state == enemy:
+    #         return -1000
+        
+    #     if self.can_win_square(np.array(square_states), player):
+    #         value += 100
+        
+    #     if self.can_win_square(np.array(square_states), enemy):
+    #         value -= 90
+        
+    #     value += sum([value_mapping[q] for q in square_states])
+        
+    #     return value
     
     def get_board_value(self, board, player=None):
         if player is None:
             player = self.tick
         
-        opposite = self.opposite_tick(player)
-        value_mapping = { player: 1, opposite: -1, EMPTY: 0.5, 'Draw': 0 }
-        can_win_values = { player: 0.8, opposite: -0.8 }
+        enemy = self.opposite_tick(player)
         
         square_states = []
         for nv in self.mapping:
-            square_state = self.get_square_state(self.get_novant_square(nv), player)
+            square_state = self.get_square_state(self.get_novant_square(board, nv), player)
             square_states.append(square_state)
         
-        game_state = self.get_square_state(square_states)
-        if game_state in (player, opposite):
-            return value_mapping[game_state] * 100
+        game_state = self.get_square_state(np.array(square_states))
+        if game_state == player:
+            return 1
+        elif game_state == enemy:
+            return -1
         
-        value = 0
-        for i, square_state in enumerate(square_states):
-            if square_state != 'Draw':
-                value += value_mapping[square_state]
-            elif self.can_win_novant_square(board, self.mapping[i], player):
-                value += can_win_values[player]
-            elif self.can_win_novant_square(board, self.mapping[i], opposite):
-                value += can_win_values[opposite]
-            else:
-                value += value_mapping['Draw']
-        
-        return sum([value_mapping[q] for q in square_states])
+        return 0
     
-    def deep_move(self, board, forced_moves, depth=0, tick=None):
+    def game_over(self, board):
+        square_states = []
+        for nv in self.mapping:
+            square_state = self.get_square_state(self.get_novant_square(board, nv))
+            square_states.append(square_state)
+        
+        game_state = self.get_square_state(np.array(square_states))
+        return game_state if game_state in ('X', 'O', 'Draw') else False
+    
+    def get_move_strength(self, board, move, tick=None):
         if tick is None:
             tick = self.tick
         
-        opposite = self.opposite_tick(tick)
+        enemy = self.opposite_tick(tick)
         
+        value = 0
+        square = board[self.map_tile[move[0]]]
+        
+        for i1, i2 in self.win_neighbors[move[1]]:
+            if i1 == tick and i2 == tick:
+                value = 1
+                break
+            elif i1 == enemy and i2 == enemy:
+                value = 0.8
+        
+        if move[1] == 'C':
+            value += 0.1
+        
+        if self.get_square_state(self.get_novant_square(board, move[0])) in ('X', 'O', 'Draw'):
+            value -= 0.5
+        
+        return value
+    
+    def board_str(self, board):
+        s = ''
+        for i in range(3):
+            s += "-" * 25 + '\n'
+            for j in range(3):
+                s += (
+                    "| "
+                    + " ".join(board[i * 3][j * 3 : (j * 3) + 3])
+                    + " | "
+                    + " ".join(board[(i * 3) + 1][j * 3 : (j * 3) + 3])
+                    + " | "
+                    + " ".join(board[(i * 3) + 2][j * 3 : (j * 3) + 3])
+                    + " |\n"
+                )
+        s += "-" * 25 + '\n'
+        return s
+    
+    def deep_move_alpha(self, board, forced_moves, depth, a, b, maxing_player):
+        self.steps += 1
+        if depth == 0 or self.game_over(board):
+            return (None, self.get_board_value(board, self.tick))
+        
+        if maxing_player:
+            moves = sorted(self.get_all_moves(board, forced_moves), key=lambda x: self.get_move_strength(board, x, self.tick))
+            chosen_move = None
+            value = -float('inf')
+            for move in moves:
+                new_forced_moves = self._make_move(board, move, self.tick)
+                _, cand_value = self.deep_move_alpha(board, new_forced_moves, depth - 1, a, b, False)
+                if move[1] == 'C':
+                    cand_value += 0.1
+                if cand_value > value:
+                    chosen_move = move
+                    value = cand_value
+                board[self.map_tile[move[0]]][self.map_tile[move[1]]] = EMPTY
+                a = max(a, value)
+                if a >= b:
+                    break
+            return (chosen_move, value)
+        else:
+            moves = sorted(self.get_all_moves(board, forced_moves), key=lambda x: self.get_move_strength(board, x, self.enemy_tick))
+            chosen_move = None
+            value = float('inf')
+            for move in moves:
+                new_forced_moves = self._make_move(board, move, self.enemy_tick)
+                _, cand_value = self.deep_move_alpha(board, new_forced_moves, depth - 1, a, b, True)
+                if cand_value < value:
+                    chosen_move = move
+                    value = cand_value
+                board[self.map_tile[move[0]]][self.map_tile[move[1]]] = EMPTY
+                b = min(b, value)
+                if a >= b:
+                    break
+            return (chosen_move, value)
+    
+    def mcts(self, old_board, forced_moves):
+        moves = self.get_all_moves(old_board, forced_moves)
+        strengths = {}
+        
+        start_time = time.time()
+        while (time.time() - start_time) < 0.1:
+            for move in moves:
+                # try:
+                    tick = self.tick
+                    board = np.copy(old_board)
+                    
+                    fm = self._make_move(board, move, tick)
+                    tick = self.enemy_tick
+                    
+                    game_over_status = self.game_over(board)
+                    while not game_over_status:
+                        m = self.rand_grabby_move(board, fm)
+                        while True:
+                            try:
+                                fm = self._make_move(board, m, tick)
+                                break
+                            except:
+                                m = self.rand_grabby_move(board, fm)
+                        tick = self.opposite_tick(tick)
+                        game_over_status = self.game_over(board)
+                    
+                    val = 1 if game_over_status == self.tick else \
+                          (-1) if game_over_status == self.enemy_tick else \
+                          0
+                    if move not in strengths:
+                        strengths[move] = [val]
+                    else:
+                        strengths[move].append(val)
+                # except Exception as e:
+                #     # print('failed in mcts move loop')
+                #     # print(e)
+                #     print('error')
+        
+        print(strengths)
+        strengths = {m: np.average(strengths[m]) for m in strengths}
+        if strengths:
+            best_move = max(strengths, key=lambda key: strengths[key])
+        else:
+            best_move = (self.mapping[randint(0, 8)], self.mapping[randint(0, 8)])
+        return best_move
+    
+    def rand_grabby_move(self, board, forced_moves, rand_ratio=0.1):
         moves = self.get_all_moves(board, forced_moves)
-        move_values = {}
-        for move in moves:
-            new_forced_moves = self._make_move(board, move, tick)
-            if depth == 0:
-                # get value of board
-                move_values[move] = self.get_board_value(board, tick)
-            else:
-                move_values[move] = min(self.deep_move(board, depth=depth-1, tick=opposite).values())
-            board[self.map_tile[move[0]]][self.map_tile[move[1]]] = EMPTY
+        if random() < 0.1:
+            return moves[randint(0, len(moves) - 1)] if moves else (self.mapping[randint(0, 8)], self.mapping[randint(0, 8)])
+        else:
+            # print('grabby?')
+            return self.grabby_move(board, forced_moves)
+    
+    def grabby_move(self, board, forced_moves):
+        for novant in forced_moves:
+            coords = self.can_win_novant_square(board, novant)
+            # print('trying win ' + str(coords))
+            if coords:
+                # print(self.board_str(board))
+                return coords
         
-        return move_values
+        for novant in forced_moves:
+            coords = self.can_win_novant_square(board, novant, self.opposite_tick())
+            # print('trying block ' + str(coords))
+            if coords:
+                return coords
+        
+        novant =  forced_moves[randint(0, len(forced_moves) - 1)] \
+                  if len(forced_moves) \
+                  else randint(0, 8)
+        cell = 'C' if self.get_novant_square(board, novant)[self.map_tile['C']] == EMPTY else self.mapping[randint(0, 8)]
+        
+        # print('trying... ' + str((novant, cell)))
+        return novant, cell
